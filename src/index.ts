@@ -3,11 +3,9 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import cookieParser from 'cookie-parser';
-import router from './routes/crawl';
+import router from './routes/user.route';
 import connectDB from './lib/db';
-import dotenv from "dotenv";
-
-
+import dotenv from 'dotenv';
 
 dotenv.config();
 const app = express();
@@ -25,7 +23,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.get('/', (req, res) => {
   res.json({ message: 'Backend server is running!' });
 });
-app.use('/api/crawl', router);
+app.use('/api/auth', router);
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
