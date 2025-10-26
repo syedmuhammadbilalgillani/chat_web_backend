@@ -1,13 +1,22 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { User } from '../lib/schema';
+import { User } from '../schema';
+import { Types } from 'mongoose';
+import AuthenticatedRequest from '../config/request';
 
-// Generate JWT
-const generateToken = (id: string) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET!, { expiresIn: '7d' });
+const generateToken = (id: string, email: string, password: string) => {
+  const token = jwt.sign({ id, email, password }, process.env.JWT_SECRET!, { expiresIn: '7d' });
+  return Buffer.from(token).toString('base64url'); // safe, URL-friendly
 };
 
+// Then decode before verifying:
+export const verifyToken = (encodedToken: string) => {
+  console.log(encodedToken, 'token');
+  console.log(typeof encodedToken, 'token');
+  const decoded = Buffer.from(encodedToken, 'base64url').toString('utf8');
+  return jwt.verify(decoded, process.env.JWT_SECRET!);
+};
 // @desc Register user
 export const registerUser = async (req: Request, res: Response) => {
   try {
@@ -29,7 +38,7 @@ export const registerUser = async (req: Request, res: Response) => {
 
     res.status(201).json({
       message: 'User registered successfully',
-      token: generateToken(user?._id.toString()),
+      token: generateToken(user._id.toString(), user?.email.toString(), user.password.toString()),
       user: {
         id: user._id,
         username: user.username,
@@ -45,6 +54,7 @@ export const registerUser = async (req: Request, res: Response) => {
 export const loginUser = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
+    console.log(req.body);
 
     const user = (await User.findOne({ email })) as any;
     if (!user) return res.status(404).json({ message: 'User not found' });
@@ -54,7 +64,7 @@ export const loginUser = async (req: Request, res: Response) => {
 
     res.status(200).json({
       message: 'Login successful',
-      token: generateToken(user._id.toString()),
+      token: generateToken(user._id.toString(), user?.email.toString(), user.password.toString()),
       user: {
         id: user._id,
         username: user.username,
@@ -70,6 +80,7 @@ export const loginUser = async (req: Request, res: Response) => {
 // @desc Get all users
 export const getUsers = async (_req: Request, res: Response) => {
   try {
+    console.log('======== fetching start');
     const users = await User.find().select('-password');
     res.status(200).json(users);
   } catch (error) {
@@ -84,6 +95,28 @@ export const getUser = async (req: Request, res: Response) => {
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.status(200).json(user);
   } catch (error) {
+    res.status(500).json({ message: 'Server error', error });
+  }
+};
+// @desc Get single user (by filtering from all users)
+export const getOtherUsers = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const authUserId = new Types.ObjectId(req?.user?._id);
+
+    // ✅ Fetch all users except the one whose _id matches the given ID
+    const otherUsers = await User.find({ _id: { $ne: authUserId } }).select('-password');
+
+    // ✅ Handle case if no other users found
+    if (!otherUsers || otherUsers.length === 0) {
+      return res.status(404).json({ message: 'No other users found' });
+    }
+
+    console.log(otherUsers, 'other users');
+
+    // ✅ Return remaining users
+    res.status(200).json(otherUsers);
+  } catch (error) {
+    console.error(error);
     res.status(500).json({ message: 'Server error', error });
   }
 };
